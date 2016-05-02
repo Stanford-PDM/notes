@@ -4,18 +4,19 @@
 | `Exp[+T]` | Reptresents an ast node that will return an expression of type T. Contains type information. |
 | `Const[+T](x: T)`<br>`extends Exp[T]` | Represents a constant expression of type T |
 | `Sym[+T](id: Int)`<br>`extends Exp[T]` | Represents a symbol that is associated to a Def[T]. Carries source context information for debugging. May be associated to several source positions due to CSE. |
-| `Variable[+T](`<br>`e: Exp[Variable[T]]`<br>`)` | ??? Not sure ??? |
 | `Def[+T]` | IR node that can be defined by a DSL or by LMS (eg. IfThenElse, DeliteOpForeach)  |
 | `Stm` | Abstract TP |
 | `TP[+T](`<br>`  sym: Sym[T],`<br> `rhs: Def[T]`<br>`) extends Stm` | Typed pair. Links one definition to a symbol |
 | `TTP(`<br>`val lhs: List[Sym[Any]],`<br>`val mhs: List[Def[Any]],`<br>`val rhs: FatDef`<br>`) extends Stm` | Fat version of a typed pair. Can define multiple symbols with a fat definition (FatDef) |
+| `Variable[+T](`<br>`e: Exp[Variable[T]]`<br>`)` | ??? Not sure ??? |
+
 
 
 
 | Method | Explanation |
 | ------ | ----------- |
 | `toAtom(d: Def[T]): Exp[T]` | Creates symbol for definition, either by creating a new symbol or returning the symbol of an equal definition that already exists (in scope?) (reflect effects?) |
-|  |  |
+| `object Def { `<br>`def unapply[T](e: Exp[T]): Option[Def[T]]`<br>`}` | Allows the use of pattern matching to find def node that corresponds to a particular symbol |
 
 ## Assumptions
 **From Vera (page 5)**: Definitions can only refer to Expressions (Def[T] can only contain Exp[T] -> Symbols or Constants), but what about nested scopes on page 7 ?
@@ -311,12 +312,41 @@ trait ForwardTransformer extends internal.AbstractSubstTransformer
 	
 ```
 
+```scala
+// in lms:
+abstract class AbstractLoop[A] extends Def[A] with CanBeFused {
+  val size: Exp[Int] // size of the loop
+  val v: Sym[Int] // bound symbol
+  val body: Def[A] // body of the loop
+}
+
+// in delite: 
+/**
+ * The base type of the DeliteOp hierarchy.
+ */
+
+/*sealed*/ trait DeliteOp[A] extends Def[A] {
+  type OpType <: DeliteOp[A]
+    
+  // TODO: why is there a transformer, and what is this used for ????
+  def original: Option[(Transformer,Def[_])] = None     
+}
+
+abstract class DeliteOpLoop[A:Manifest](implicit ctx: SourceContext) extends AbstractLoop[A] with DeliteOp[A] {
+  type OpType <: DeliteOpLoop[A]
+  def copyBodyOrElse(e: => Def[A]): Def[A] = original.map(p=>mirrorLoopBody(p._2.asInstanceOf[OpType].body,p._1)).getOrElse(e)
+  final lazy val v: Sym[Int] = copyTransformedOrElse(_.v)(fresh[Int]).asInstanceOf[Sym[Int]]
+  val numDynamicChunks:Int = 0
+}
+```
 
 ## Ideas
+ - Have a special message to prevent people from running sbt if git submodule are not initialized
  - Use scala.Dynamic to replace infix_ and thus implicits in new lms macro-virt
  - Use forge to statically resolve the linearization of mixins so the compiler doesn't need to do it when compiling a dsl (can you do it while preserving source compat ?)
  - Find a way to migrate bound syms at the end of a list of commutative operations, so code motion can kick in
  - Track down places where SourceContexts are missing
+ - DSL for (more)-precise floating point computations (https://homes.cs.washington.edu/~jrw12/herbie.pdf)
  
 
 ## HS Questions
@@ -324,4 +354,6 @@ trait ForwardTransformer extends internal.AbstractSubstTransformer
 
 ## Tasks
 Transformer to code cpp => string concat
+Get Vera's loop fusion to work on Delite
+
 
