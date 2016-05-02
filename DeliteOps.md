@@ -14,34 +14,76 @@ abstract class AbstractLoop extends Def[A] with CanBeFused {
 
 #Delite
 
+## Introduction
+
+**TODO: Verify assumptions**
+
+The DeliteOpLoop is the base of the hierarchy of loops that are available to the DSL creator. 
+
+The DeliteLoopElem represents the body of a loop, and is useful only to extract the body of loops from the deliteOps.
+
+`DeliteOpsIR` -> internal to the delite compiler. (`DeliteLoopElem`lives here)
+
+`DeliteOps` -> operations available to DSL authors. (`DeliteOpLoop`'s childrens lives here)
+
+## Legend
+![Alt text](http://g.gravizo.com/g?
+  digraph G {
+    "LMS Code" [color=gray,style=filled];
+    "DeliteOps.scala" [color=lightblue,style=filled];
+    "DeliteOpsIR.scala" [color=salmon,style=filled];
+  }
+)
+
 ## DeliteLoops
 
 ![Alt text](http://g.gravizo.com/g?
   digraph G {
     rankdir=BT;
-    Def [shape=box];
+    Def [shape=box,color=gray,style=filled];
     ;
-    AbstractLoop [shape=box];
+    AbstractLoop [shape=box,color=gray,style=filled];
     AbstractLoop -> Def;
     ;
-    DeliteOp [shape=box];
+    DeliteOp [shape=box,color=salmon,style=filled];
     DeliteOp -> Def;
     ;
-    DeliteOpLoop [shape=box];
+    DeliteOpLoop [shape=box,color=salmon,style=filled];
     DeliteOpLoop -> AbstractLoop;
     DeliteOpLoop -> DeliteOp;
     ;
-    DeliteOpCollectLoop [shape=box];
+    DeliteOpCollectLoop [shape=box,color=lightblue,style=filled];
     DeliteOpCollectLoop -> DeliteOpLoop;
     ;
-    DeliteOpFlatMapLike [shape=box];
+    DeliteOpFlatMapLike [shape=box,color=lightblue,style=filled];
     DeliteOpFlatMapLike -> DeliteOpCollectLoop;
     ;
-    DeliteOpFoldLike [shape=box];
+    DeliteOpFoldLike [shape=box,color=lightblue,style=filled];
     DeliteOpFoldLike-> DeliteOpCollectLoop;
     ;
-    DeliteOpReduceLike [shape=box];
-    DeliteOpReduceLike -> DeliteOpCollectLoop;    
+    DeliteOpReduceLike [shape=box,color=lightblue,style=filled];
+    DeliteOpReduceLike -> DeliteOpCollectLoop;
+    ;
+    DeliteOpForeach [shape=box,color=lightblue,style=filled]; 
+    DeliteOpForeach -> DeliteOpLoop
+    ;
+    DeliteOpHashCollectLike [shape=box,color=lightblue,style=filled];
+    DeliteOpHashCollectLike -> DeliteOpLoop;
+    ;  
+    DeliteOpHashReduceLike [shape=box,color=lightblue,style=filled];
+    DeliteOpHashReduceLike -> DeliteOpLoop;
+    ;
+    DeliteOpMapLike [shape=box,color=lightblue,style=filled];
+    DeliteOpMapLike -> DeliteOpFlatMapLike;
+    ;
+    DeliteOpMapI [shape=box,color=lightblue,style=filled];
+    DeliteOpMapI -> DeliteOpMapLike;
+    ;
+    DeliteOpFilterI [shape=box,color=lightblue,style=filled];
+    DeliteOpFilterI -> DeliteOpFlatMapLike;
+    ;
+    DeliteOpFlatMapI [shape=box,color=lightblue,style=filled];
+    DeliteOpFlatMapI -> DeliteOpFlatMapLike;
   }
 )
 
@@ -49,39 +91,39 @@ abstract class AbstractLoop extends Def[A] with CanBeFused {
 ![Alt text](http://g.gravizo.com/g?
   digraph G {
     rankdir=BT;
-    Def [shape=box];
+    Def [shape=box,color=gray,style=filled];
     ;
-    DeliteLoopElem [shape=box];
+    DeliteLoopElem [shape=box,color= salmon,style=filled];
     ;
-    DeliteHashElem [shape=box];
+    DeliteHashElem [shape=box,color=salmon,style=filled];
     DeliteHashElem -> Def;
     ;
-    DeliteHashIndexElem [shape=box];
+    DeliteHashIndexElem [shape=box,color=salmon,style=filled];
     DeliteHashIndexElem -> DeliteHashElem;
     DeliteHashIndexElem -> DeliteLoopElem;
     ;
-    DeliteCollectBaseElem [shape=box];
+    DeliteCollectBaseElem [shape=box,color=salmon,style=filled];
     DeliteCollectBaseElem -> Def;
     DeliteCollectBaseElem -> DeliteLoopElem;
     ;
-    DeliteFoldElem [shape=box];
+    DeliteFoldElem [shape=box,color=salmon,style=filled];
     DeliteFoldElem -> DeliteCollectBaseElem;
     ;
-    DeliteReduceElem [shape=box];
+    DeliteReduceElem [shape=box,color=salmon,style=filled];
     DeliteReduceElem -> DeliteCollectBaseElem;
     ;
-    DeliteCollectElem [shape=box];
+    DeliteCollectElem [shape=box,color=salmon,style=filled];
     DeliteCollectElem -> DeliteCollectBaseElem;
     ;
-    DeliteHashReduceElem [shape=box];
+    DeliteHashReduceElem [shape=box,color=salmon,style=filled];
     DeliteHashReduceElem -> DeliteHashElem;
     DeliteHashReduceElem -> DeliteLoopElem;
     ;
-    DeliteHashCollectElem [shape=box];
+    DeliteHashCollectElem [shape=box,color=salmon,style=filled];
     DeliteHashCollectElem -> DeliteHashElem;
     DeliteHashCollectElem -> DeliteLoopElem;
     ;
-    DeliteForeachElem [shape=box];
+    DeliteForeachElem [shape=box,color=salmon,style=filled];
     DeliteForeachElem -> Def;
     DeliteForeachElem -> DeliteLoopElem;
   }
@@ -114,7 +156,7 @@ final lazy val field: Type = copyTransformedOrElse(_.field)(someValue).asInstanc
 
 It means that the field's value is `someValue` which is either a default value or another field in the class. And the reason why it is written this way is to automatically apply a transformer to all members of a class. 
 
-For consiceness reasons, for now on, I will rewrite the above as :
+For consiceness reasons, from this point on, I will rewrite the above as :
 
 ```scala
 val field: Type = someValue
@@ -125,9 +167,7 @@ val field: Type = someValue
 class DeliteOpLoop extends AbstractLoop[A] with DeliteOp[A] {
     type A:Manifest
 
-    val size: Exp[Int] // Size of the loop
     val v: Sym[Int] = fresh[Int] // Symbol for index inside the body
-    val body: Def[A] // Expression representing the body of the loop
     val numDynamicChunks: Int = 0 // Parallellism of the loop
 }
 ```
@@ -136,11 +176,6 @@ Base of all the delite parallel loops.
 ## DeliteOpCollectLoop
 ```scala
 class DeliteOpCollectLoop[O:Manifest, R:Manifest] extends DeliteOpLoop[R] {
-    val size: Exp[Int] // Size of the loop
-    val v: Sym[Int] = fresh[Int] // Symbol for index inside the body
-    val body: Def[A] // Expression representing the body of the loop
-    val numDynamicChunks: Int = 0 // Parallellism of the loop
-
     // The flatmap function, creating a collection for every loop index
     // that is then further processed (the loop index is this.v).
     def flatMapLikeFunc(): Exp[DeliteCollection[O]]
@@ -162,10 +197,43 @@ The elems extend DeliteCollectBaseElem and the ops extend this trait to get the 
 
 ## DeliteLoopElem
 ```scala
-val numDynamicChunks: Int
+val numDynamicChunks: Int // Parallelism of the loop
 ```
 
 Base class for all of the loop bodies of delite.
+
+**TODO: why doesn't `DeliteLoopElem` extend `Def` ?**
+
+## DeliteCollectBaseElem
+```scala
+class DeliteCollectBaseElem extends Def[O] with DeliteLoopElem {
+    type A:Manifest
+    type O:Manifest
+    
+    // flatmap function, produces an intermediate collection for each
+    // iteration,  which is appended one by one to the output collection
+    // through an inner loop
+    val iFunc: Block[DeliteCollection[A]]
+    
+    // true in the general flatMap case, false for a fixed-size map
+    val unknownOutputSize: Boolean
+    
+    // The number of dynamic chunks
+    val numDynamicChunks: Int
+    
+    // bound symbol to hold the intermediate collection computed by iFunc
+    val eF: Sym[DeliteCollection[A]]
+    
+    // inner loop index symbol to iterate over the intermediate collection
+    val iF: Sym[Int]
+    
+    // size of the intermediate collection (range of inner loop)
+    val sF: Block[Int]
+    
+    // element of the intermediate collection at the current inner loop index
+    val aF: Block[A]
+
+```
 
 ## DeliteOpFlatMapLike
 ```scala
@@ -227,7 +295,7 @@ class DeliteOpFlatMapLike extends DeliteOpCollectLoop[O,CO] {
     }
 
     // loop elem
-    lazy val body: Def[CO] = copyBodyOrElse(DeliteCollectElem[O,I,CO](
+    lazy val body: Def[CO] = DeliteCollectElem[O,I,CO](
       buf = this.buf,
       iFunc = reifyEffects(this.iFunc),
       unknownOutputSize = this.unknownOutputSize,
@@ -236,11 +304,11 @@ class DeliteOpFlatMapLike extends DeliteOpCollectLoop[O,CO] {
       iF = this.iF,
       sF = reifyEffects(dc_size(eF)),
       aF = reifyEffects(dc_apply(eF,iF))
-    ))
+    )
   }
 ```
 
 ### TODO:
 ### What is the difference between DeliteOps.scala and DeliteOpsIR.scala
-### Is there a better way to mirror than original ?
+### Is there a better way to mirror than through `original` ?
 ### 
