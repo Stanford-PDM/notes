@@ -27,7 +27,8 @@ The DeliteLoopElem represents the body of a loop, and is useful only to extract 
 `DeliteOps` -> operations available to DSL authors. (`DeliteOpLoop`'s childrens lives here)
 
 ## Legend
-![Alt text](http://g.gravizo.com/g?
+
+![Alt text](http://www.dotty.ch/g?
   digraph G {
     "LMS Code" [color=gray,style=filled];
     "DeliteOps.scala" [color=lightblue,style=filled];
@@ -37,7 +38,7 @@ The DeliteLoopElem represents the body of a loop, and is useful only to extract 
 
 ## DeliteLoops
 
-![Alt text](http://g.gravizo.com/g?
+![Alt text](http://www.dotty.ch/g?
   digraph G {
     rankdir=BT;
     Def [shape=box,color=gray,style=filled];
@@ -88,7 +89,7 @@ The DeliteLoopElem represents the body of a loop, and is useful only to extract 
 )
 
 ## DeliteElems
-![Alt text](http://g.gravizo.com/g?
+![Alt text](http://www.dotty.ch/g?
   digraph G {
     rankdir=BT;
     Def [shape=box,color=gray,style=filled];
@@ -151,7 +152,7 @@ so during its constructor, the delite op actually checks if original is defined,
 Everytime there is something like this :
 
 ```scala    
-final lazy val field: Type = copyTransformedOrElse(_.field)(someValue).asInstanceOf[Type]
+lazy val field: Type = copyTransformedOrElse(_.field)(someValue).asInstanceOf[Type]
 ```
 
 It means that the field's value is `someValue` which is either a default value or another field in the class. And the reason why it is written this way is to automatically apply a transformer to all members of a class. 
@@ -184,7 +185,7 @@ class DeliteOpCollectLoop[O:Manifest, R:Manifest] extends DeliteOpLoop[R] {
     val iFunc: Exp[DeliteCollection[O]] = flatMapLikeFunc()
     val iF: Sym[Int] = fresh[Int]
     val eF: Sym[DeliteCollection[O]] = fresh[DeliteCollection[O]](iFunc.tp)
-  }
+}
 ```
 
 Most parallel ops have loop bodies ("elems") that create an intermediate collection for every loop index. For a flatMap loop, those collections are concatenated, for a reduce loop, they are reduced. This general structure allows for a single operation to encode combinations of map, filter and flatMap operations. For example, a flatMap and a mapReduce can be combined by fusion into a single reduce node which contains a flatMap.  
@@ -197,7 +198,9 @@ The elems extend DeliteCollectBaseElem and the ops extend this trait to get the 
 
 ## DeliteLoopElem
 ```scala
-val numDynamicChunks: Int // Parallelism of the loop
+trait DeliteLoopElem {
+    val numDynamicChunks: Int // Parallelism of the loop
+}
 ```
 
 Base class for all of the loop bodies of delite.
@@ -207,8 +210,8 @@ Base class for all of the loop bodies of delite.
 ## DeliteCollectBaseElem
 ```scala
 class DeliteCollectBaseElem extends Def[O] with DeliteLoopElem {
-    type A:Manifest
-    type O:Manifest
+    type A:Manifest // Type of element of intermediate collection
+    type O:Manifest // Type of result
     
     // flatmap function, produces an intermediate collection for each
     // iteration,  which is appended one by one to the output collection
@@ -232,8 +235,34 @@ class DeliteCollectBaseElem extends Def[O] with DeliteLoopElem {
     
     // element of the intermediate collection at the current inner loop index
     val aF: Block[A]
-
+}
 ```
+This LoopElem is the base for all operations that produce an intermediate collection. 
+
+For example, a flatMap operation will directly output the concatenation of the intermediate collections, whereas a reduce operation will reduce them first. The reduce operation also has an intermediate collection (it is thus really a flatMap-reduce) so it can be fused with previous operations. The flatMap function might actually define a simple map or a filter, which allow more efficient code to be generated because the intermediate collection doesn't need to be allocated and iterated over. Those special cases are represented by their respective DeliteCollectType (see below) and are handled at the codegen level.
+
+
+## DeliteCollectElem
+```scala
+class DeliteCollectElem extends DeliteCollectBaseElem[A, CA] {
+    type A:Manifest // Type of element of the intermediate collection
+    type I <: DeliteCollection[A]:Manifest // Type of intermediate collection
+    type CA <: DeliteCollection[A]:Manifest // Type of output collection
+    
+    // The output collection/buffer to be used
+    val buf: DeliteCollectOutput[A,I,CA]
+    
+    override val iFunc: Block[DeliteCollection[A]]
+    override val unknownOutputSize: Boolean
+    override val numDynamicChunks: Int
+    override val eF: Sym[DeliteCollection[A]]
+    override val iF: Sym[Int]
+    override val sF: Block[Int]
+    override val aF: Block[A]
+}
+```
+  
+This LoopElem is used for all flatMap-type operations (loops that produce an output collection of type CA). There are two different output strategies, see DeliteCollectOutputStrategy. 
 
 ## DeliteOpFlatMapLike
 ```scala
