@@ -1,3 +1,7 @@
+# Unanswered Questions:
+### Is there a better way to mirror than through `original` ?
+
+
 #LMS
 
 ## AbstractLoop
@@ -237,6 +241,13 @@ class DeliteCollectBaseElem extends Def[O] with DeliteLoopElem {
     val aF: Block[A]
 }
 ```
+
+**TODO: what are thos names: ???**
+**iFunc -> intermediate function ?**
+**eF -> expr Flat ?**
+**sF -> expr FlatMap ?**
+**aF -> expr FlatMap ?**
+
 This LoopElem is the base for all operations that produce an intermediate collection. 
 
 For example, a flatMap operation will directly output the concatenation of the intermediate collections, whereas a reduce operation will reduce them first. The reduce operation also has an intermediate collection (it is thus really a flatMap-reduce) so it can be fused with previous operations. The flatMap function might actually define a simple map or a filter, which allow more efficient code to be generated because the intermediate collection doesn't need to be allocated and iterated over. Those special cases are represented by their respective DeliteCollectType (see below) and are handled at the codegen level.
@@ -336,8 +347,3 @@ class DeliteOpFlatMapLike extends DeliteOpCollectLoop[O,CO] {
     )
   }
 ```
-
-### TODO:
-### What is the difference between DeliteOps.scala and DeliteOpsIR.scala
-### Is there a better way to mirror than through `original` ?
-### 
