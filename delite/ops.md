@@ -1,6 +1,25 @@
 # Unanswered Questions:
 ### Is there a better way to mirror than through `original` ?
 
+getCollectElemType ?? it applies to a reduce, how come ? Because can only reduce something that was previously built ? what if it doesn't match anything ?
+
+what is codegenrestage, and what is it used for ?
+
+# Extra
+- `type A` is for elements of the first (**A**) input collection
+- `type B` is for elements of the second (**B**) input collection
+- `type O` is for elements of the **[O]**utput follection
+- `type I` is for the **[I]**ntermediate collection
+- `type R` if for the **[R]**esult value of a reduce/fold
+
+
+Todo to make life easier :
+
+- Find macro solution to original fields
+- Split Ops into maps / flatmaps / filters / reduce / fold etc...
+- add documentation in the codegen
+- split enormous abstract fat loop emitter
+
 
 #LMS
 
@@ -253,97 +272,30 @@ This LoopElem is the base for all operations that produce an intermediate collec
 For example, a flatMap operation will directly output the concatenation of the intermediate collections, whereas a reduce operation will reduce them first. The reduce operation also has an intermediate collection (it is thus really a flatMap-reduce) so it can be fused with previous operations. The flatMap function might actually define a simple map or a filter, which allow more efficient code to be generated because the intermediate collection doesn't need to be allocated and iterated over. Those special cases are represented by their respective DeliteCollectType (see below) and are handled at the codegen level.
 
 
-## DeliteCollectElem
+## Difference between OutputBuffer and OutputFlat Strategies
+### OutputBuffer
+The output is accumulated in a local buffer before being appended to the resulting structure. This strategy is used when the resulting's collection size is not known statically, and the output collection is linear. (for ex flatmap)
+
+### OutputFlat
+The output is directly sent to the collection, when the collection doesn't have a linear structure or has a statically known size.
+
+
+## DeliteCollectOutput
 ```scala
-class DeliteCollectElem extends DeliteCollectBaseElem[A, CA] {
-    type A:Manifest // Type of element of the intermediate collection
-    type I <: DeliteCollection[A]:Manifest // Type of intermediate collection
-    type CA <: DeliteCollection[A]:Manifest // Type of output collection
-    
-    // The output collection/buffer to be used
-    val buf: DeliteCollectOutput[A,I,CA]
-    
-    override val iFunc: Block[DeliteCollection[A]]
-    override val unknownOutputSize: Boolean
-    override val numDynamicChunks: Int
-    override val eF: Sym[DeliteCollection[A]]
-    override val iF: Sym[Int]
-    override val sF: Block[Int]
-    override val aF: Block[A]
-}
-```
-  
-This LoopElem is used for all flatMap-type operations (loops that produce an output collection of type CA). There are two different output strategies, see DeliteCollectOutputStrategy. 
+// bound vars
+// Element to be added to the output. Code generation of the element
+// computation finishes with eV = result, then it gets added to the output.
+val eV: Sym[A],
+val sV: Sym[Int],      // Size of the output collection
+val allocVal: Sym[I],  // Allocated output collection
 
-## DeliteOpFlatMapLike
-```scala
-class DeliteOpFlatMapLike extends DeliteOpCollectLoop[O,CO] {
-    type O:Manifest // type of individual element of resulting collection
-    type I <: DeliteCollection[O]:Manifest // type of intermediate colleciton
-    type CO <: DeliteCollection[O]:Manifest // type of resulting collection
-
-    // Behavior supplied by subclasses
-    
-    // Allocates the intermediate result collection. The size passed is 0 if
-    // the OutputStrategy is OutputBuffer, and it is op.size (the input size of
-    // this loop) if it is OutputFlat.
-    def alloc(size: Exp[Int]): Exp[I] = ??? // should be overriden
-    // the finalizer to transform the intermediate result collection of type I
-    // to the final output collection of type CO
-    def finalizer(x: Exp[I]): Exp[CO]
-    // true in the general flatMap case, false for a fixed-size map where the
-    // output size is known before runtime
-    val unknownOutputSize = true
-
-    // Buffer bound vars
-    val eV: Sym[O] = fresh[O] // TODO: element of the input collention ?
-    val sV: Sym[Int] = fresh[Int] // TODO: size of the input collection ?
-    val allocVal: Sym[I] = reflectMutableSym(fresh[I]) // TODO: ???
-    val iV: Sym[Int] = fresh[Int] // TODO:  ???
-    val iV2: Sym[Int] = fresh[Int] // TODO: ???
-    val aV2: Sym[I] = fresh[I] // TODO: ???
-
-    // buffer elem
-    lazy val buf: DeliteCollectOutput[O, I, CO] = 
-    
-    getOutputStrategy(unknownOutputSize, dc_linear_buffer(this.allocVal)) match {
-     case OutputBuffer => DeliteCollectBufferOutput[O, I, CO](
-        eV = this.eV,
-        sV = this.sV,
-        iV = this.iV,
-        iV2 = this.iV2,
-        allocVal = this.allocVal,
-        aV2 = this.aV2,
-        alloc = reifyEffects(this.alloc(sV)),
-        update = reifyEffects(dc_update(allocVal,v,eV)),
-        append = reifyEffects(dc_append(allocVal,v,eV)),
-        appendable = reifyEffects(dc_appendable(allocVal,v,eV)),
-        setSize = reifyEffects(dc_set_logical_size(allocVal,sV)),
-        allocRaw = reifyEffects(dc_alloc[O,I](allocVal,sV)),
-        copyRaw = reifyEffects(dc_copy(aV2,iV,allocVal,iV2,sV)),
-        finalizer = reifyEffects(this.finalizer(allocVal))
-      )
-
-      case OutputFlat => DeliteCollectFlatOutput[O, I, CO](
-        eV = this.eV,
-        sV = this.sV,
-        allocVal = this.allocVal,
-        alloc = reifyEffects(this.alloc(sV)),
-        update = reifyEffects(dc_update(allocVal,v,eV)),
-        finalizer = reifyEffects(this.finalizer(allocVal))
-      )
-    }
-
-    // loop elem
-    lazy val body: Def[CO] = DeliteCollectElem[O,I,CO](
-      buf = this.buf,
-      iFunc = reifyEffects(this.iFunc),
-      unknownOutputSize = this.unknownOutputSize,
-      numDynamicChunks = this.numDynamicChunks,
-      eF = this.eF,
-      iF = this.iF,
-      sF = reifyEffects(dc_size(eF)),
-      aF = reifyEffects(dc_apply(eF,iF))
-    )
-  }
+// collection functions
+// Allocates the output collection, usually using sV as argument.
+val alloc: Block[I],
+// Updates allocVal with the newest output element eV, possibly using the
+// loop index v (e.g. update at index of linear output collection).
+val update: Block[Unit],
+// Transforms from DC[I] to DC[CA], identity if no intermediate collection
+// type is used, or e.g. creating the result collection from a builder.
+val finalizer: Block[CA]
 ```

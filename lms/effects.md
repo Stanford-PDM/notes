@@ -1,0 +1,2 @@
+- no nested mutable objects
+- no mutable aliases

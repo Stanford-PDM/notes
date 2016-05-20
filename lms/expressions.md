@@ -1,4 +1,4 @@
-# LMS Wiki
+# Base & Expressions
 | Type | Explanation |
 | ---- | ----------- |
 | `Exp[+T]` | Reptresents an ast node that will return an expression of type T. Contains type information. |
@@ -8,7 +8,7 @@
 | `Stm` | Abstract TP |
 | `TP[+T](`<br>`  sym: Sym[T],`<br> `rhs: Def[T]`<br>`) extends Stm` | Typed pair. Links one definition to a symbol |
 | `TTP(`<br>`val lhs: List[Sym[Any]],`<br>`val mhs: List[Def[Any]],`<br>`val rhs: FatDef`<br>`) extends Stm` | Fat version of a typed pair. Can define multiple symbols with a fat definition (FatDef) |
-| `Variable[+T](`<br>`e: Exp[Variable[T]]`<br>`)` | ??? Not sure ??? |
+| `Variable[+T](`<br>`e: Exp[Variable[T]]`<br>`)` | Used to encapsulate a variable reference. Use of a variable will trigger generation of code to read the variable. (see ReadVarImplicits) |
 
 
 
@@ -20,18 +20,20 @@
 | | |
 
 
+### How is the IR represented
+The IR is represented as a sea of nodes. Similar to SSA form, it allows common optimizations like CSE and DCE to be perfomed.
+
+
 ### How does CSE (Common subexpression elimination) happen ?
 When the dsl is executed and the nodes are formed, every node extends Def, but they can only reference symbols or constants (Exp). The toAtom is thus called everytime a node is created, and it takes care of looking up if this node already exists or not. It also registers the node if it is the first time it is seen.
 
-### ANF, SSA or CPS ?
-- Administrative Normal Form
-- Single Static Assigment
-- Continuation Passing Style
-
-The IR LMS uses is in SSA form (or ANF?).
 
 ### How does DCE (Dead code elimination) happen
-Whenever
+Whenever 
+
+
+### How do I translate from `Def`s to `Exp`s and back ?
+Going from a `Def` to an `Exp` basically implies 
 
 ### What is mirror ?
 Mirroring is like evaluating the IR, 
@@ -40,6 +42,10 @@ Mirroring is like evaluating the IR,
 
 
 ### What is reify ?
+
+
+### Arrays ? How do they work ?
+
 
 
 
